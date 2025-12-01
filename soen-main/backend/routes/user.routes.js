@@ -1,29 +1,64 @@
-import { Router } from 'express';
-import * as userController from '../controllers/user.controller.js';
-import { body } from 'express-validator';
-import * as authMiddleware from '../middleware/auth.middleware.js';
+// backend/routes/user.routes.js
+import { Router } from "express";
+import { body } from "express-validator";
+import {
+  registerStart,
+  registerVerify,
+  login,
+} from "../controllers/user.controller.js";
+import User from "../models/user.model.js";
+import * as authMiddleWare from "../middleware/auth.middleware.js";
 
 const router = Router();
 
+// Registration Step 1: send OTP
+router.post(
+  "/register-start",
+  [
+    body("email").isEmail().withMessage("Valid email is required"),
+    body("password")
+      .isLength({ min: 6 })
+      .withMessage("Password must be at least 6 characters"),
+  ],
+  registerStart
+);
 
+// Registration Step 2: verify OTP
+router.post(
+  "/register-verify",
+  [
+    body("email").isEmail().withMessage("Valid email is required"),
+    body("otp")
+      .isLength({ min: 4, max: 6 })
+      .withMessage("OTP must be 4–6 digits"),
+  ],
+  registerVerify
+);
 
-router.post('/register',
-    body('email').isEmail().withMessage('Email must be a valid email address'),
-    body('password').isLength({ min: 3 }).withMessage('Password must be at least 3 characters long'),
-    userController.createUserController);
+// Normal login (no OTP)
+router.post(
+  "/login",
+  [
+    body("email").isEmail().withMessage("Valid email is required"),
+    body("password").notEmpty().withMessage("Password is required"),
+  ],
+  login
+);
 
-router.post('/login',
-    body('email').isEmail().withMessage('Email must be a valid email address'),
-    body('password').isLength({ min: 3 }).withMessage('Password must be at least 3 characters long'),
-    userController.loginController);
+// ✅ New: Get all users for collaborators
+router.get("/all", authMiddleWare.authUser, async (req, res) => {
+  try {
+    const loggedInEmail = req.user?.email
 
-router.get('/profile', authMiddleware.authUser, userController.profileController);
+    const users = await User.find(
+      loggedInEmail ? { email: { $ne: loggedInEmail } } : {}
+    ).select("_id email")
 
-
-router.get('/logout', authMiddleware.authUser, userController.logoutController);
-
-
-router.get('/all', authMiddleware.authUser, userController.getAllUsersController);
-
+    res.json({ users })
+  } catch (err) {
+    console.error(err)
+    res.status(500).json("Failed to fetch users")
+  }
+});
 
 export default router;

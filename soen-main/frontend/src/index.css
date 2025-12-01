@@ -3,8 +3,8 @@
 @tailwind utilities;
 
 * {
-  margin: 0%;
-  padding: 0%;
+  margin: 0;
+  padding: 0;
   box-sizing: border-box;
 }
 
@@ -14,9 +14,36 @@ body {
   width: 100%;
 }
 
-.message-box{
+/* Smooth scrolling in all scrollable areas */
+html {
   scroll-behavior: smooth;
 }
-.message-box::-webkit-scrollbar{
+
+/* Project chat message box */
+.message-box {
+  scroll-behavior: smooth;
+}
+
+/* Hide scrollbar for message-box only (you already had this) */
+.message-box::-webkit-scrollbar {
   display: none;
+}
+
+/* Optional: nicer thin scrollbar for other areas (file tree, modals, etc.) */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: #020617; /* slate-950 */
+}
+
+::-webkit-scrollbar-thumb {
+  background: #334155; /* slate-700 */
+  border-radius: 999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #6366f1; /* indigo-500 */
 }

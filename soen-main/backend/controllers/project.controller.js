@@ -1,133 +1,163 @@
-import projectModel from '../models/project.model.js';
-import * as projectService from '../services/project.service.js';
-import userModel from '../models/user.model.js';
-import { validationResult } from 'express-validator';
-
+// backend/controllers/project.controller.js
+import { validationResult } from "express-validator";
+import mongoose from "mongoose";
+import Project from "../models/project.model.js";
 
 export const createProject = async (req, res) => {
-
+  try {
     const errors = validationResult(req);
-
     if (!errors.isEmpty()) {
-        return res.status(400).json({ errors: errors.array() });
+      return res.status(400).json({ errors: errors.array() });
     }
 
-    try {
+    const { name } = req.body;
+    const ownerId = req.user?._id;
 
-        const { name } = req.body;
-        const loggedInUser = await userModel.findOne({ email: req.user.email });
-        const userId = loggedInUser._id;
+    const project = await Project.create({
+      name,
+      users: ownerId ? [ownerId] : [],
+      fileTree: {},
+    });
 
-        const newProject = await projectService.createProject({ name, userId });
+    const populated = await Project.findById(project._id).populate(
+      "users",
+      "email"
+    );
 
-        res.status(201).json(newProject);
-
-    } catch (err) {
-        console.log(err);
-        res.status(400).send(err.message);
+    return res.status(201).json({
+      message: "Project created successfully",
+      project: populated,
+    });
+  } catch (err) {
+    console.error(err);
+    if (err.code === 11000) {
+      return res.status(400).json("Project name must be unique");
     }
-
-
-
-}
+    return res.status(500).json("Failed to create project");
+  }
+};
 
 export const getAllProject = async (req, res) => {
-    try {
+  try {
+    const userId = req.user?._id;
 
-        const loggedInUser = await userModel.findOne({
-            email: req.user.email
-        })
+    const projects = await Project.find(
+      userId ? { users: userId } : {}
+    )
+      .populate("users", "email")
+      .sort({ createdAt: -1 });
 
-        const allUserProjects = await projectService.getAllProjectByUserId({
-            userId: loggedInUser._id
-        })
-
-        return res.status(200).json({
-            projects: allUserProjects
-        })
-
-    } catch (err) {
-        console.log(err)
-        res.status(400).json({ error: err.message })
-    }
-}
+    return res.json({ projects });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json("Failed to fetch projects");
+  }
+};
 
 export const addUserToProject = async (req, res) => {
+  try {
     const errors = validationResult(req);
-
     if (!errors.isEmpty()) {
-        return res.status(400).json({ errors: errors.array() });
+      return res.status(400).json({ errors: errors.array() });
     }
 
-    try {
+    const { projectId, users } = req.body;
 
-        const { projectId, users } = req.body
-
-        const loggedInUser = await userModel.findOne({
-            email: req.user.email
-        })
-
-
-        const project = await projectService.addUsersToProject({
-            projectId,
-            users,
-            userId: loggedInUser._id
-        })
-
-        return res.status(200).json({
-            project,
-        })
-
-    } catch (err) {
-        console.log(err)
-        res.status(400).json({ error: err.message })
+    if (!mongoose.Types.ObjectId.isValid(projectId)) {
+      return res.status(400).json("Invalid project ID");
     }
 
+    const project = await Project.findById(projectId);
+    if (!project) {
+      return res.status(404).json("Project not found");
+    }
 
-}
+    const newUserIds = users.filter(id =>
+      mongoose.Types.ObjectId.isValid(id)
+    );
+
+    const mergedUserIds = [
+      ...new Set([
+        ...project.users.map(id => id.toString()),
+        ...newUserIds,
+      ]),
+    ];
+
+    project.users = mergedUserIds;
+    await project.save();
+
+    const populated = await Project.findById(projectId).populate(
+      "users",
+      "email"
+    );
+
+    return res.json({
+      message: "Users added to project successfully",
+      project: populated,
+    });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json("Failed to add users to project");
+  }
+};
 
 export const getProjectById = async (req, res) => {
-
+  try {
     const { projectId } = req.params;
 
-    try {
-
-        const project = await projectService.getProjectById({ projectId });
-
-        return res.status(200).json({
-            project
-        })
-
-    } catch (err) {
-        console.log(err)
-        res.status(400).json({ error: err.message })
+    if (!projectId) {
+      return res.status(400).json("Project ID is required");
     }
 
-}
+    if (!mongoose.Types.ObjectId.isValid(projectId)) {
+      return res.status(400).json("Invalid project ID");
+    }
+
+    const project = await Project.findById(projectId).populate(
+      "users",
+      "email"
+    );
+
+    if (!project) {
+      return res.status(404).json("Project not found");
+    }
+
+    return res.json({ project });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json("Failed to get project");
+  }
+};
 
 export const updateFileTree = async (req, res) => {
+  try {
     const errors = validationResult(req);
-
     if (!errors.isEmpty()) {
-        return res.status(400).json({ errors: errors.array() });
+      return res.status(400).json({ errors: errors.array() });
     }
 
-    try {
+    const { projectId, fileTree } = req.body;
 
-        const { projectId, fileTree } = req.body;
-
-        const project = await projectService.updateFileTree({
-            projectId,
-            fileTree
-        })
-
-        return res.status(200).json({
-            project
-        })
-
-    } catch (err) {
-        console.log(err)
-        res.status(400).json({ error: err.message })
+    if (!mongoose.Types.ObjectId.isValid(projectId)) {
+      return res.status(400).json("Invalid project ID");
     }
 
-}
+    const project = await Project.findByIdAndUpdate(
+      projectId,
+      { fileTree },
+      { new: true }
+    ).populate("users", "email");
+
+    if (!project) {
+      return res.status(404).json("Project not found");
+    }
+
+    return res.json({
+      message: "File tree updated successfully",
+      project,
+    });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json("Failed to update file tree");
+  }
+};

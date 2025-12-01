@@ -1,31 +1,23 @@
 import jwt from "jsonwebtoken";
-import redisClient from "../services/redis.service.js";
-
+import User from "../models/user.model.js";
 
 export const authUser = async (req, res, next) => {
-    try {
-        const token = req.cookies.token || req.headers.authorization.split(' ')[ 1 ];
+  try {
+    const header = req.headers.authorization;
+    if (!header) return res.status(401).json("Authorization token missing");
 
-        if (!token) {
-            return res.status(401).send({ error: 'Unauthorized User' });
-        }
+    const token = header.replace("Bearer ", "").trim();
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
-        const isBlackListed = await redisClient.get(token);
+    if (!decoded) return res.status(401).json("Invalid token");
 
-        if (isBlackListed) {
+    const user = await User.findOne({ email: decoded.email }).select("_id email");
+    if (!user) return res.status(401).json("User not found");
 
-            res.cookie('token', '');
-
-            return res.status(401).send({ error: 'Unauthorized User' });
-        }
-
-        const decoded = jwt.verify(token, process.env.JWT_SECRET);
-        req.user = decoded;
-        next();
-    } catch (error) {
-
-        console.log(error);
-
-        res.status(401).send({ error: 'Unauthorized User' });
-    }
-}
+    req.user = user;
+    next();
+  } catch (err) {
+    console.error("auth error:", err);
+    res.status(401).json("Unauthorized");
+  }
+};

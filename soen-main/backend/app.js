@@ -27,4 +27,17 @@ app.get('/', (req, res) => {
     res.send('Hello World!');
 });
 
+import { generateResult } from "./services/ai.service.js";
+
+app.get("/test-ai", async (req, res) => {
+  try {
+    const response = await generateResult("Say hello in one sentence.");
+    res.json({ ok: true, response });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ ok: false, error: String(err.message) });
+  }
+});
+
+
 export default app; 
