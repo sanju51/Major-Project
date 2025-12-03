@@ -65,7 +65,11 @@ const Register = () => {
 
         localStorage.setItem('token', res.data.token)
         setUser(res.data.user)
-        navigate('/') // go to home
+        if (res.data?.user?.username) {
+          navigate('/')
+        } else {
+          navigate('/onboarding')
+        }
       } catch (err) {
         console.log(err?.response?.data || err)
         setError(
@@ -88,19 +92,16 @@ const Register = () => {
       </div>
 
       <div className="relative z-10 w-full max-w-md px-4">
-        {/* Header / brand */}
         <div className="mb-6 flex items-center justify-center gap-3">
           <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-tr from-indigo-500 to-purple-500 shadow-lg shadow-purple-500/60">
-            <i className="ri-user-add-line text-xl text-white" />
+            <i className="ri-planet-line text-xl text-white" />
           </div>
           <div className="text-left">
             <h1 className="text-xl font-semibold leading-tight">
-              {step === 'form' ? 'Create your account' : 'Verify your email'}
+              {step === 'form' ? 'Join Syntara' : 'Verify your email'}
             </h1>
             <p className="text-xs text-slate-400">
-              {step === 'form'
-                ? 'Sign up to start creating collaborative AI projects.'
-                : `We’ve sent an OTP to ${email}. Enter it to finish.`}
+              {step === 'form' ? 'Create your account to get started.' : `We’ve sent an OTP to ${email}. Enter it to finish.`}
             </p>
           </div>
         </div>

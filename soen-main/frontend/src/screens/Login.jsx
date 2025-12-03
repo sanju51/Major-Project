@@ -37,7 +37,11 @@ const Login = () => {
 
       localStorage.setItem('token', res.data.token)
       setUser(res.data.user)
-      navigate('/') // go to home
+      if (res.data?.user?.username) {
+        navigate('/')
+      } else {
+        navigate('/onboarding')
+      }
     } catch (err) {
       console.log(err?.response?.data || err)
       setError(
@@ -59,18 +63,13 @@ const Login = () => {
       </div>
 
       <div className="relative z-10 w-full max-w-md px-4">
-        {/* Logo / Title */}
         <div className="mb-6 flex items-center justify-center gap-3">
           <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-tr from-indigo-500 to-purple-500 shadow-lg shadow-purple-500/60">
-            <i className="ri-flashlight-line text-xl text-white" />
+            <i className="ri-planet-line text-xl text-white" />
           </div>
           <div className="text-left">
-            <h1 className="text-xl font-semibold leading-tight">
-              Welcome back
-            </h1>
-            <p className="text-xs text-slate-400">
-              Sign in to continue to your workspace.
-            </p>
+            <h1 className="text-xl font-semibold leading-tight">Welcome to Syntara</h1>
+            <p className="text-xs text-slate-400">Sign in to continue.</p>
           </div>
         </div>
 

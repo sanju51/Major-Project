@@ -66,7 +66,7 @@ const Home = () => {
               Dashboard
             </p>
             <h1 className="mt-1 text-2xl md:text-3xl font-semibold">
-              Welcome{user?.email ? `, ${user.email.split('@')[0]}` : ''} 👋
+              Welcome{user?.username ? `, ${user.username}` : user?.email ? `, ${user.email.split('@')[0]}` : ''} 👋
             </h1>
             <p className="mt-1 text-sm text-slate-400 max-w-lg">
               Create and collaborate on AI-powered projects in a sleek workspace.

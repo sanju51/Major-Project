@@ -21,7 +21,7 @@ export const createProject = async (req, res) => {
 
     const populated = await Project.findById(project._id).populate(
       "users",
-      "email"
+      "email username"
     );
 
     return res.status(201).json({
@@ -88,7 +88,7 @@ export const addUserToProject = async (req, res) => {
 
     const populated = await Project.findById(projectId).populate(
       "users",
-      "email"
+      "email username"
     );
 
     return res.json({
@@ -146,7 +146,7 @@ export const updateFileTree = async (req, res) => {
       projectId,
       { fileTree },
       { new: true }
-    ).populate("users", "email");
+    ).populate("users", "email username");
 
     if (!project) {
       return res.status(404).json("Project not found");

@@ -3,6 +3,7 @@ import { validationResult } from "express-validator";
 import User from "../models/user.model.js";
 import PendingUser from "../models/pendingUser.model.js";
 import { sendOtp } from "../services/mail.service.js";
+import mongoose from "mongoose";
 
 // STEP 1: start registration, send OTP to email
 export const registerStart = async (req, res) => {
@@ -131,5 +132,47 @@ export const login = async (req, res) => {
   } catch (err) {
     console.error(err);
     return res.status(500).json("Login failed");
+  }
+};
+
+export const setUsername = async (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
+
+    const { username } = req.body;
+
+    if (!username || typeof username !== "string") {
+      return res.status(400).json("Username is required");
+    }
+
+    const trimmed = username.trim();
+
+    if (trimmed.length < 2 || trimmed.length > 30) {
+      return res.status(400).json("Username must be 2-30 characters long");
+    }
+
+    const userId = req.user?._id;
+    if (!userId || !mongoose.Types.ObjectId.isValid(userId)) {
+      return res.status(401).json("Unauthorized");
+    }
+
+    const existing = await User.findById(userId);
+    if (!existing) {
+      return res.status(404).json("User not found");
+    }
+
+    existing.username = trimmed;
+    await existing.save();
+
+    const userObj = existing.toObject();
+    delete userObj.password;
+
+    return res.json({ user: userObj });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json("Failed to set username");
   }
 };

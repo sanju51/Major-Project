@@ -5,6 +5,7 @@ import {
   registerStart,
   registerVerify,
   login,
+  setUsername,
 } from "../controllers/user.controller.js";
 import User from "../models/user.model.js";
 import * as authMiddleWare from "../middleware/auth.middleware.js";
@@ -52,7 +53,7 @@ router.get("/all", authMiddleWare.authUser, async (req, res) => {
 
     const users = await User.find(
       loggedInEmail ? { email: { $ne: loggedInEmail } } : {}
-    ).select("_id email")
+    ).select("_id email username")
 
     res.json({ users })
   } catch (err) {
@@ -60,5 +61,17 @@ router.get("/all", authMiddleWare.authUser, async (req, res) => {
     res.status(500).json("Failed to fetch users")
   }
 });
+
+router.post(
+  "/set-username",
+  [
+    body("username")
+      .isString()
+      .isLength({ min: 2, max: 30 })
+      .withMessage("Username must be 2-30 characters long"),
+  ],
+  authMiddleWare.authUser,
+  setUsername
+);
 
 export default router;

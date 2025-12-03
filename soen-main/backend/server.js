@@ -71,13 +71,14 @@ io.on('connection', (socket) => {
         // 🔹 Call AI service
         const result = await generateResult(prompt);
 
-        io.to(socket.roomId).emit('project-message', {
-          message: result, // should be JSON string { text, fileTree? }
-          sender: {
-            _id: 'ai',
-            email: 'AI',
-          },
-        });
+      io.to(socket.roomId).emit('project-message', {
+        message: result, // should be JSON string { text, fileTree? }
+        sender: {
+          _id: 'ai',
+          email: 'AI',
+          username: 'AI',
+        },
+      });
       } catch (err) {
         console.error('AI error in socket handler:', err);
 
@@ -95,6 +96,7 @@ io.on('connection', (socket) => {
           sender: {
             _id: 'ai',
             email: 'AI',
+            username: 'AI',
           },
         });
       }

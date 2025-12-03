@@ -11,7 +11,7 @@ export const authUser = async (req, res, next) => {
 
     if (!decoded) return res.status(401).json("Invalid token");
 
-    const user = await User.findOne({ email: decoded.email }).select("_id email");
+  const user = await User.findOne({ email: decoded.email }).select("_id email username");
     if (!user) return res.status(401).json("User not found");
 
     req.user = user;
