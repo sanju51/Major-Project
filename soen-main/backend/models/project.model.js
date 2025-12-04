@@ -10,6 +10,12 @@ const projectSchema = new mongoose.Schema({
         unique: [ true, 'Project name must be unique' ],
     },
 
+    owner: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'user',
+        required: false,
+    },
+
     users: [
         {
             type: mongoose.Schema.Types.ObjectId,

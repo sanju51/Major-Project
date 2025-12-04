@@ -146,9 +146,16 @@ const Home = () => {
                       <i className="ri-user-line text-slate-500" />
                       <span>{project.users?.length || 0} collaborators</span>
                     </div>
-                    <span className="rounded-full bg-slate-800/80 px-2 py-0.5 text-[10px] uppercase tracking-wide text-slate-300">
-                      Active
-                    </span>
+                    <div className="flex items-center gap-2">
+                      {project.owner && (
+                        <span className="rounded-full bg-indigo-600/30 px-2 py-0.5 text-[10px] uppercase tracking-wide text-indigo-200">
+                          Owner: {project.owner.username || (project.owner.email ? project.owner.email.split('@')[0] : '')}
+                        </span>
+                      )}
+                      <span className="rounded-full bg-slate-800/80 px-2 py-0.5 text-[10px] uppercase tracking-wide text-slate-300">
+                        Active
+                      </span>
+                    </div>
                   </div>
                 </div>
               ))}

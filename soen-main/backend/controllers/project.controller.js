@@ -15,14 +15,14 @@ export const createProject = async (req, res) => {
 
     const project = await Project.create({
       name,
+      owner: ownerId || undefined,
       users: ownerId ? [ownerId] : [],
       fileTree: {},
     });
 
-    const populated = await Project.findById(project._id).populate(
-      "users",
-      "email username"
-    );
+    const populated = await Project.findById(project._id)
+      .populate("users", "email username")
+      .populate("owner", "email username");
 
     return res.status(201).json({
       message: "Project created successfully",
@@ -44,7 +44,8 @@ export const getAllProject = async (req, res) => {
     const projects = await Project.find(
       userId ? { users: userId } : {}
     )
-      .populate("users", "email")
+      .populate("users", "email username")
+      .populate("owner", "email username")
       .sort({ createdAt: -1 });
 
     return res.json({ projects });
@@ -113,10 +114,9 @@ export const getProjectById = async (req, res) => {
       return res.status(400).json("Invalid project ID");
     }
 
-    const project = await Project.findById(projectId).populate(
-      "users",
-      "email"
-    );
+    const project = await Project.findById(projectId)
+      .populate("users", "email username")
+      .populate("owner", "email username");
 
     if (!project) {
       return res.status(404).json("Project not found");
