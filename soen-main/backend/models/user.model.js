@@ -21,6 +21,11 @@ const userSchema = new mongoose.Schema(
       minlength: [6, "Email must be at least 6 characters long"],
       maxlength: [50, "Email must not be longer than 50 characters"],
     },
+    role: {
+      type: String,
+      enum: ['owner', 'project-manager', 'backend-developer', 'frontend-developer', 'qa', 'viewer'],
+      default: 'viewer',
+    },
     isVerified: {
       type: Boolean,
       default: false,
@@ -30,6 +35,23 @@ const userSchema = new mongoose.Schema(
       select: false,
       required: true,
     },
+    bio: {
+      type: String,
+      default: "",
+    },
+    skills: [String],
+    experience: [
+      {
+        company: String,
+        position: String,
+        duration: String,
+        description: String,
+      },
+    ],
+    linkedin: String,
+    github: String,
+    portfolioUrl: String,
+    avatar: String,
   },
   { timestamps: true }
 );

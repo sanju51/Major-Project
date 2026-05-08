@@ -46,6 +46,29 @@ router.post(
   login
 );
 
+// Register alias for verify or start
+router.post(
+  "/register",
+  [
+    body("email").isEmail().withMessage("Valid email is required"),
+    body("password")
+      .isLength({ min: 6 })
+      .withMessage("Password must be at least 6 characters"),
+  ],
+  registerStart
+);
+
+// ✅ New: Get current authenticated user profile
+router.get("/me", authMiddleWare.authUser, async (req, res) => {
+  try {
+    const user = await User.findById(req.user._id).select("-password");
+    res.json(user);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json("Failed to fetch profile");
+  }
+});
+
 // ✅ New: Get all users for collaborators
 router.get("/all", authMiddleWare.authUser, async (req, res) => {
   try {
@@ -73,5 +96,21 @@ router.post(
   authMiddleWare.authUser,
   setUsername
 );
+
+// ✅ New: Update profile
+router.put("/profile", authMiddleWare.authUser, async (req, res) => {
+  try {
+    const { username, bio, skills, experience, linkedin, github, portfolioUrl } = req.body;
+    const user = await User.findByIdAndUpdate(
+      req.user._id,
+      { username, bio, skills, experience, linkedin, github, portfolioUrl },
+      { new: true }
+    ).select("-password");
+    res.json(user);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json("Failed to update profile");
+  }
+});
 
 export default router;

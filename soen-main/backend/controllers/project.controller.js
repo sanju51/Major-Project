@@ -10,18 +10,24 @@ export const createProject = async (req, res) => {
       return res.status(400).json({ errors: errors.array() });
     }
 
-    const { name } = req.body;
+    const { name, description, priority, projectType, category, startDate, endDate } = req.body;
     const ownerId = req.user?._id;
 
     const project = await Project.create({
       name,
+      description,
+      priority: priority || 'medium',
+      projectType: projectType || 'other',
+      category: category || 'Software Development',
+      startDate: startDate || undefined,
+      endDate: endDate || undefined,
       owner: ownerId || undefined,
-      users: ownerId ? [ownerId] : [],
+      users: ownerId ? [{ user: ownerId, role: 'owner' }] : [],
       fileTree: {},
     });
 
     const populated = await Project.findById(project._id)
-      .populate("users", "email username")
+      .populate("users.user", "email username")
       .populate("owner", "email username");
 
     return res.status(201).json({
@@ -42,9 +48,9 @@ export const getAllProject = async (req, res) => {
     const userId = req.user?._id;
 
     const projects = await Project.find(
-      userId ? { users: userId } : {}
+      userId ? { "users.user": userId } : {}
     )
-      .populate("users", "email username")
+      .populate("users.user", "email username")
       .populate("owner", "email username")
       .sort({ createdAt: -1 });
 
@@ -64,31 +70,31 @@ export const addUserToProject = async (req, res) => {
 
     const { projectId, users } = req.body;
 
-    if (!mongoose.Types.ObjectId.isValid(projectId)) {
-      return res.status(400).json("Invalid project ID");
-    }
-
-    const project = await Project.findById(projectId);
+    // Project is already fetched by checkProjectRole middleware if used, 
+    // but for safety we check if it's on the request or fetch it.
+    const project = req.project || await Project.findById(projectId);
+    
     if (!project) {
       return res.status(404).json("Project not found");
     }
 
-    const newUserIds = users.filter(id =>
-      mongoose.Types.ObjectId.isValid(id)
-    );
+    // users should be [{ userId, role }] or just [userId] (default to viewer)
+    const usersToAdd = users.map(u => {
+      if (typeof u === 'string') {
+        return { user: u, role: 'viewer' };
+      }
+      return { user: u.userId || u.user, role: u.role || 'viewer' };
+    }).filter(u => mongoose.Types.ObjectId.isValid(u.user));
 
-    const mergedUserIds = [
-      ...new Set([
-        ...project.users.map(id => id.toString()),
-        ...newUserIds,
-      ]),
-    ];
+    // Filter out users already in the project
+    const existingUserIds = project.users.map(u => u.user.toString());
+    const filteredNewUsers = usersToAdd.filter(u => !existingUserIds.includes(u.user.toString()));
 
-    project.users = mergedUserIds;
+    project.users.push(...filteredNewUsers);
     await project.save();
 
     const populated = await Project.findById(projectId).populate(
-      "users",
+      "users.user",
       "email username"
     );
 
@@ -115,7 +121,7 @@ export const getProjectById = async (req, res) => {
     }
 
     const project = await Project.findById(projectId)
-      .populate("users", "email username")
+      .populate("users.user", "email username")
       .populate("owner", "email username");
 
     if (!project) {
@@ -142,15 +148,13 @@ export const updateFileTree = async (req, res) => {
       return res.status(400).json("Invalid project ID");
     }
 
-    const project = await Project.findByIdAndUpdate(
-      projectId,
-      { fileTree },
-      { new: true }
-    ).populate("users", "email username");
-
+    const project = await Project.findById(projectId);
     if (!project) {
       return res.status(404).json("Project not found");
     }
+
+    project.fileTree = fileTree;
+    await project.save();
 
     return res.json({
       message: "File tree updated successfully",
@@ -159,5 +163,45 @@ export const updateFileTree = async (req, res) => {
   } catch (err) {
     console.error(err);
     return res.status(500).json("Failed to update file tree");
+  }
+};
+
+export const getGanttData = async (req, res) => {
+  try {
+    const { projectId } = req.params;
+    const tasks = await mongoose.model('task').find({ project: projectId }).populate('assignee', 'username');
+    
+    // Format for Gantt (example: frappe-gantt)
+    const ganttData = tasks.map(t => ({
+      id: t._id,
+      name: t.title,
+      start: t.startDate || t.createdAt,
+      end: t.dueDate || new Date(Date.now() + 86400000), // Default 1 day
+      progress: t.status === 'completed' ? 100 : 0,
+      dependencies: t.dependencies || [] // if you have dependencies
+    }));
+
+    res.json(ganttData);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json("Failed to fetch Gantt data");
+  }
+};
+
+export const getBudgetData = async (req, res) => {
+  try {
+    const { projectId } = req.params;
+    const project = await Project.findById(projectId);
+    if (!project) return res.status(404).json("Project not found");
+
+    res.json({
+      budget: project.budget,
+      spent: project.spent,
+      remaining: project.budget - project.spent,
+      utilizationRate: project.budget > 0 ? (project.spent / project.budget) * 100 : 0
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json("Failed to fetch budget data");
   }
 };

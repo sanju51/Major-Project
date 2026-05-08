@@ -4,19 +4,20 @@ import Login from '../screens/Login'
 import Register from '../screens/Register'
 import Home from '../screens/Home'
 import Project from '../screens/Project'
-import Onboarding from '../screens/Onboarding'
+import ProjectDashboard from '../screens/ProjectDashboard'
+import Profile from '../screens/Profile'
 import UserAuth from '../auth/UserAuth'
 
 const AppRoutes = () => {
     return (
         <BrowserRouter>
-
             <Routes>
                 <Route path="/" element={<UserAuth><Home /></UserAuth>} />
                 <Route path="/login" element={<Login />} />
                 <Route path="/register" element={<Register />} />
-                <Route path="/onboarding" element={<UserAuth><Onboarding /></UserAuth>} />
                 <Route path="/project" element={<UserAuth><Project /></UserAuth>} />
+                <Route path="/project-dashboard" element={<UserAuth><ProjectDashboard /></UserAuth>} />
+                <Route path="/profile" element={<UserAuth><Profile /></UserAuth>} />
             </Routes>
 
         </BrowserRouter>

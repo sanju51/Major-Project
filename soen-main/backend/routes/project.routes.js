@@ -20,13 +20,14 @@ router.get('/all',
 router.put('/add-user',
     authMiddleWare.authUser,
     body('projectId').isString().withMessage('Project ID is required'),
-    body('users').isArray({ min: 1 }).withMessage('Users must be an array of strings').bail()
-        .custom((users) => users.every(user => typeof user === 'string')).withMessage('Each user must be a string'),
+    body('users').isArray({ min: 1 }).withMessage('Users must be an array'),
+    authMiddleWare.checkProjectRole(['owner', 'admin']),
     projectController.addUserToProject
 )
 
 router.get('/get-project/:projectId',
     authMiddleWare.authUser,
+    authMiddleWare.checkProjectRole(['owner', 'admin', 'developer', 'tester', 'viewer']),
     projectController.getProjectById
 )
 
@@ -34,7 +35,20 @@ router.put('/update-file-tree',
     authMiddleWare.authUser,
     body('projectId').isString().withMessage('Project ID is required'),
     body('fileTree').isObject().withMessage('File tree is required'),
+    authMiddleWare.checkProjectRole(['owner', 'admin', 'developer']),
     projectController.updateFileTree
+)
+
+router.get('/gantt/:projectId',
+    authMiddleWare.authUser,
+    authMiddleWare.checkProjectRole(['owner', 'admin', 'developer', 'tester', 'viewer']),
+    projectController.getGanttData
+)
+
+router.get('/budget/:projectId',
+    authMiddleWare.authUser,
+    authMiddleWare.checkProjectRole(['owner', 'admin']),
+    projectController.getBudgetData
 )
 
 

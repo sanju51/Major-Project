@@ -33,7 +33,7 @@ const Login = () => {
 
     try {
       setLoading(true)
-      const res = await axios.post('/users/login', { email, password })
+      const res = await axios.post('/auth/login', { email, password })
 
       localStorage.setItem('token', res.data.token)
       setUser(res.data.user)
@@ -68,7 +68,7 @@ const Login = () => {
             <i className="ri-planet-line text-xl text-white" />
           </div>
           <div className="text-left">
-            <h1 className="text-xl font-semibold leading-tight">Welcome to Syntara</h1>
+            <h1 className="text-xl font-semibold leading-tight">Welcome to ProjectPulse</h1>
             <p className="text-xs text-slate-400">Sign in to continue.</p>
           </div>
         </div>

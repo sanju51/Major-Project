@@ -1,6 +1,7 @@
 import { useState, useEffect, useContext, useRef } from "react";
 import { UserContext } from "../context/user.context";
-import { useLocation } from "react-router-dom";
+import { useTheme } from "../context/theme.context";
+import { useLocation, useNavigate } from "react-router-dom";
 import axios from "../config/axios";
 import { initializeSocket, receiveMessage, sendMessage } from "../config/socket";
 import Markdown from "markdown-to-jsx";
@@ -22,15 +23,22 @@ function SyntaxHighlightedCode(props) {
 
 const Project = () => {
   const location = useLocation();
+  const navigate = useNavigate();
   const { user } = useContext(UserContext);
+  const { theme, toggleTheme } = useTheme();
 
   const [project, setProject] = useState(location.state.project);
+  const userRole = project.users?.find(u => (u.user._id || u.user) === user._id)?.role || 'viewer';
+  const isAuthorizedToAdd = ['owner', 'admin'].includes(userRole);
+
   const [messages, setMessages] = useState([]);
+  const [analytics, setAnalytics] = useState(null);
   const [message, setMessage] = useState("");
   const [users, setUsers] = useState([]);
   const [usersError, setUsersError] = useState("");
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [selectedUserId, setSelectedUserId] = useState(new Set());
+  const [isSidePanelOpen, setIsSidePanelOpen] = useState(false);
+  const [selectedUsers, setSelectedUsers] = useState({}); // { [userId]: role }
 
   const [fileTree, setFileTree] = useState({});
   const [currentFile, setCurrentFile] = useState(null);
@@ -66,21 +74,41 @@ const Project = () => {
   }, [fileTree]);
 
   const handleUserClick = (id) => {
-    setSelectedUserId((prev) => {
-      const updated = new Set(prev);
-      updated.has(id) ? updated.delete(id) : updated.add(id);
+    setSelectedUsers((prev) => {
+      const updated = { ...prev };
+      if (updated[id]) {
+        delete updated[id];
+      } else {
+        updated[id] = "viewer";
+      }
       return updated;
     });
   };
 
+  const handleRoleChange = (userId, role) => {
+    setSelectedUsers((prev) => ({
+      ...prev,
+      [userId]: role,
+    }));
+  };
+
   const addCollaborators = async () => {
     try {
-      await axios.put("/projects/add-user", {
+      const usersPayload = Object.entries(selectedUsers).map(([userId, role]) => ({
+        userId,
+        role,
+      }));
+
+      const res = await axios.put("/projects/add-user", {
         projectId: project._id,
-        users: Array.from(selectedUserId),
+        users: usersPayload,
       });
+
+      if (res.data.project) {
+        setProject(res.data.project);
+      }
       setIsModalOpen(false);
-      setSelectedUserId(new Set());
+      setSelectedUsers({});
     } catch (err) {
       console.log(err);
     }
@@ -136,6 +164,15 @@ const Project = () => {
       })
       .catch((err) => {
         console.log("Error fetching project by id:", err?.response?.data || err);
+      });
+
+    axios
+      .get(`/analytics/project/${location.state.project._id}`)
+      .then((res) => {
+        setAnalytics(res.data);
+      })
+      .catch((err) => {
+        console.log("Error fetching analytics:", err);
       });
 
     // 👥 Fetch users list
@@ -362,18 +399,18 @@ const Project = () => {
   return (
     <main
       ref={layoutRef} // NEW
-      className="h-screen w-screen flex bg-gradient-to-br from-slate-950 via-slate-900 to-indigo-900 text-white"
+      className="h-screen w-screen flex bg-slate-50 dark:bg-gradient-to-br dark:from-slate-950 dark:via-slate-900 dark:to-indigo-900 text-slate-900 dark:text-white transition-colors duration-300"
     >
       {/* LEFT: Chat */}
       <section
         style={{ width: leftWidth }} // NEW
-        className="min-w-[15rem] max-w-[32rem] border-r border-slate-800 flex flex-col"
+        className="min-w-[15rem] max-w-[32rem] border-r border-slate-200 dark:border-slate-800 flex flex-col"
       >
-        <header className="flex justify-between items-center px-4 py-3 border-b border-slate-800 bg-slate-900">
+        <header className="flex justify-between items-center px-4 py-3 border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
           <div className="flex items-center gap-2">
-            <h2 className="font-semibold">{project.name}</h2>
+            <h2 className="font-bold text-indigo-600 dark:text-indigo-400">{project.name}</h2>
             {project.owner && (
-              <span className="text-[10px] rounded-full bg-indigo-600/30 px-2 py-0.5 text-indigo-200 uppercase tracking-wide">
+              <span className="text-[10px] rounded-full bg-indigo-500/10 dark:bg-indigo-600/30 px-2 py-0.5 text-indigo-600 dark:text-indigo-200 uppercase tracking-wide font-bold">
                 Owner:{" "}
                 {project.owner.username ||
                   (project.owner.email
@@ -382,15 +419,41 @@ const Project = () => {
               </span>
             )}
           </div>
-          <button
-            onClick={() => setIsModalOpen(true)}
-            className="px-3 py-1 bg-purple-600 rounded-md text-sm"
-          >
-            + Add
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={toggleTheme}
+              className="p-1.5 bg-slate-100 dark:bg-slate-800 rounded-md hover:bg-slate-200 dark:hover:bg-slate-700 transition"
+              title={theme === 'dark' ? 'Light Mode' : 'Dark Mode'}
+            >
+              <i className={theme === 'dark' ? 'ri-sun-line text-indigo-400' : 'ri-moon-line text-indigo-600'} />
+            </button>
+            <button
+              onClick={() => navigate('/project-dashboard', { state: { project } })}
+              className="p-1.5 bg-slate-100 dark:bg-slate-800 rounded-md hover:bg-slate-200 dark:hover:bg-slate-700 transition flex items-center gap-1.5 px-3"
+              title="Kanban Board & Tasks"
+            >
+              <i className="ri-layout-grid-line text-indigo-500 dark:text-indigo-400" />
+              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300">Board</span>
+            </button>
+            {isAuthorizedToAdd && (
+              <button
+                onClick={() => setIsModalOpen(true)}
+                className="px-3 py-1 bg-indigo-600 rounded-md text-[10px] font-bold uppercase tracking-wider text-white hover:bg-indigo-700 transition shadow-lg shadow-indigo-500/20"
+              >
+                + Add
+              </button>
+            )}
+            <button
+              onClick={() => setIsSidePanelOpen(!isSidePanelOpen)}
+              className="p-1.5 bg-slate-100 dark:bg-slate-800 rounded-md hover:bg-slate-200 dark:hover:bg-slate-700 transition"
+              title="Project Details"
+            >
+              <i className="ri-information-line text-lg text-indigo-500 dark:text-indigo-400" />
+            </button>
+          </div>
         </header>
 
-        <div className="flex flex-col flex-grow overflow-hidden">
+        <div className="flex flex-col flex-grow overflow-hidden bg-white/50 dark:bg-transparent">
           <div
             ref={messageBox}
             className="message-box flex-grow overflow-auto space-y-3 p-4"
@@ -413,35 +476,35 @@ const Project = () => {
                 >
                   {!isSelf && (
                     <div
-                      className={`h-7 w-7 rounded-full flex items-center justify-center text-xs ${
-                        isAi ? "bg-purple-600" : "bg-slate-700"
+                      className={`h-7 w-7 rounded-full flex items-center justify-center text-xs font-bold ${
+                        isAi ? "bg-purple-600 text-white" : "bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300"
                       }`}
                     >
                       {initial}
                     </div>
                   )}
                   <div
-                    className={`max-w-[75%] rounded-2xl px-3 py-2 ${
+                    className={`max-w-[75%] rounded-2xl px-3 py-2 shadow-sm ${
                       isAi
-                        ? "bg-gradient-to-br from-purple-700/40 to-indigo-700/40 border border-purple-400/50"
+                        ? "bg-purple-50 dark:bg-gradient-to-br dark:from-purple-700/40 dark:to-indigo-700/40 border border-purple-200 dark:border-purple-400/50 text-slate-800 dark:text-slate-100"
                         : isSelf
                         ? "bg-gradient-to-br from-indigo-600 to-purple-600 text-white"
-                        : "bg-slate-800"
+                        : "bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 border border-slate-100 dark:border-slate-700"
                     }`}
                   >
                     <div
-                      className={`text-[11px] font-medium ${
-                        isSelf ? "text-white/80" : "text-slate-300/80"
+                      className={`text-[11px] font-bold uppercase tracking-wider ${
+                        isSelf ? "text-white/80" : "text-indigo-600 dark:text-slate-300/80"
                       }`}
                     >
                       {name}
                     </div>
-                    <div className="mt-1 text-sm">
+                    <div className="mt-1 text-sm leading-relaxed">
                       {isAi ? WriteAiMessage(msg.message) : msg.message}
                     </div>
                   </div>
                   {isSelf && (
-                    <div className="h-7 w-7 rounded-full flex items-center justify-center text-xs bg-indigo-600">
+                    <div className="h-7 w-7 rounded-full flex items-center justify-center text-xs font-bold bg-indigo-600 text-white">
                       {(user.username || user.email || "U")
                         .charAt(0)
                         .toUpperCase()}
@@ -452,17 +515,118 @@ const Project = () => {
             })}
           </div>
 
-          <div className="flex p-2 border-t border-slate-800 bg-slate-900">
+          <div className="flex p-3 border-t border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-xl">
             <input
               value={message}
               onChange={(e) => setMessage(e.target.value)}
-              placeholder="Message Syntara... use @ai for assistant"
-              className="flex-grow bg-slate-800 text-white px-3 py-2 rounded-l"
+              placeholder="Message ProjectPulse... use @ai for assistant"
+              className="flex-grow bg-slate-50 dark:bg-slate-800 text-slate-800 dark:text-white px-4 py-2.5 rounded-l-xl text-sm focus:outline-none border border-slate-200 dark:border-slate-700 focus:border-indigo-500 transition"
             />
-            <button onClick={send} className="px-4 bg-purple-600 rounded-r">
-              <i className="ri-send-plane-2-fill" />
+            <button onClick={send} className="px-5 bg-indigo-600 text-white rounded-r-xl hover:bg-indigo-700 transition shadow-lg shadow-indigo-500/20">
+              <i className="ri-send-plane-2-fill text-lg" />
             </button>
           </div>
+
+          {/* Project Info Side Panel Overlay */}
+          {isSidePanelOpen && (
+            <div className="absolute inset-0 z-20 bg-white dark:bg-slate-950 flex flex-col border-r border-slate-200 dark:border-slate-800 animate-in slide-in-from-left duration-300">
+              <header className="flex justify-between items-center px-4 py-3 border-b border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900">
+                <h2 className="font-bold flex items-center gap-2 text-indigo-600 dark:text-indigo-400">
+                  <i className="ri-information-line" />
+                  Documentation
+                </h2>
+                <button
+                  onClick={() => setIsSidePanelOpen(false)}
+                  className="p-1 hover:bg-slate-200 dark:hover:bg-slate-800 rounded transition"
+                >
+                  <i className="ri-close-line text-xl" />
+                </button>
+              </header>
+
+              <div className="flex-grow overflow-auto p-5 space-y-8">
+                <section>
+                  <h3 className="text-[10px] uppercase tracking-[0.2em] text-slate-400 dark:text-slate-500 mb-4 font-extrabold">Team & Roles</h3>
+                  <div className="space-y-3">
+                    {project.users?.map((u, i) => (
+                      <div key={i} className="flex items-center justify-between bg-slate-50 dark:bg-slate-900/50 border border-slate-100 dark:border-slate-800 rounded-2xl p-3.5 group hover:border-indigo-500/30 transition">
+                        <div className="flex items-center gap-3">
+                          <div className="h-9 w-9 rounded-full bg-gradient-to-tr from-indigo-500 to-purple-500 flex items-center justify-center text-xs font-bold text-white shadow-md">
+                            {(u.user.username || u.user.email || 'U').charAt(0).toUpperCase()}
+                          </div>
+                          <div>
+                            <div className="text-sm font-bold text-slate-800 dark:text-slate-100">{u.user.username || u.user.email}</div>
+                            <div className="text-[10px] text-slate-500 font-medium">{u.user.email}</div>
+                          </div>
+                        </div>
+                        <span className={`text-[9px] px-2.5 py-0.5 rounded-full uppercase tracking-widest font-extrabold shadow-sm ${
+                          u.role === 'owner' ? 'bg-indigo-500/10 text-indigo-600 dark:text-indigo-400' :
+                          u.role === 'admin' ? 'bg-purple-500/10 text-purple-600 dark:text-purple-400' :
+                          'bg-slate-100 dark:bg-slate-800 text-slate-500'
+                        }`}>
+                          {u.role}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </section>
+
+                <section>
+                  <h3 className="text-[10px] uppercase tracking-[0.2em] text-slate-400 dark:text-slate-500 mb-4 font-extrabold">Overview</h3>
+                  <div className="bg-slate-50 dark:bg-slate-900/50 border border-slate-100 dark:border-slate-800 rounded-2xl p-4">
+                    <h4 className="text-base font-bold text-indigo-600 dark:text-indigo-300">{project.name}</h4>
+                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-2 leading-relaxed font-medium">
+                      {project.description || "This platform integrates code execution, real-time collaboration, and project management into a single unified workspace."}
+                    </p>
+                  </div>
+                </section>
+
+                <section>
+                  <h3 className="text-[10px] uppercase tracking-[0.2em] text-slate-400 dark:text-slate-500 mb-4 font-extrabold">Features</h3>
+                  <div className="space-y-4">
+                    {[
+                      { icon: 'ri-code-s-slash-line', title: 'WebContainer', desc: 'Run Node.js environments directly in your browser securely.' },
+                      { icon: 'ri-chat-smile-2-line', title: 'AI Assistant', desc: 'Integrated AI chat for code generation and debugging.' },
+                      { icon: 'ri-group-line', title: 'Collaboration', desc: 'Real-time project sharing and role-based access control.' },
+                      { icon: 'ri-layout-grid-line', title: 'Project Management', desc: 'Track status, priority, and timeline of your projects.' },
+                    ].map((f, i) => (
+                      <div key={i} className="flex gap-4 items-start group">
+                        <div className="h-8 w-8 rounded-lg bg-indigo-50 dark:bg-indigo-600/10 flex items-center justify-center shrink-0 group-hover:scale-110 transition">
+                          <i className={`${f.icon} text-indigo-600 dark:text-indigo-400`} />
+                        </div>
+                        <div>
+                          <h4 className="text-xs font-bold text-slate-800 dark:text-slate-100">{f.title}</h4>
+                          <p className="text-[10px] text-slate-500 dark:text-slate-400 leading-normal mt-0.5">{f.desc}</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </section>
+
+                <section>
+                  <h3 className="text-[10px] uppercase tracking-[0.2em] text-slate-400 dark:text-slate-500 mb-4 font-extrabold">Shortcuts</h3>
+                  <div className="bg-slate-50 dark:bg-slate-900/50 border border-slate-100 dark:border-slate-800 rounded-2xl p-4 space-y-3">
+                    <div className="flex justify-between items-center">
+                      <span className="text-[10px] font-bold text-slate-500 uppercase">Run Code</span>
+                      <kbd className="px-2 py-0.5 rounded bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-[9px] font-bold text-slate-400">Ctrl+Enter</kbd>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-[10px] font-bold text-slate-500 uppercase">Save File</span>
+                      <kbd className="px-2 py-0.5 rounded bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-[9px] font-bold text-slate-400">Ctrl+S</kbd>
+                    </div>
+                  </div>
+                </section>
+              </div>
+
+              <div className="p-5 border-t border-slate-200 dark:border-slate-800">
+                <button
+                  onClick={() => setIsSidePanelOpen(false)}
+                  className="w-full py-3 bg-slate-900 dark:bg-white text-white dark:text-slate-900 rounded-xl text-xs font-bold uppercase tracking-widest hover:opacity-90 transition shadow-lg"
+                >
+                  Close Documentation
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       </section>
 
@@ -714,18 +878,37 @@ const Project = () => {
               <p className="text-gray-400 text-sm">No users found.</p>
             )}
 
-            <div className="space-y-2 h-48 overflow-auto">
+            <div className="space-y-2 h-64 overflow-auto">
               {users.map((u) => (
                 <div
                   key={u._id}
-                  onClick={() => handleUserClick(u._id)}
-                  className={`p-2 rounded-md cursor-pointer ${
-                    selectedUserId.has(u._id)
-                      ? "bg-purple-600"
-                      : "bg-slate-800"
+                  className={`p-2 rounded-md flex flex-col gap-2 ${
+                    selectedUsers[u._id] ? "bg-slate-800 ring-1 ring-purple-500" : "bg-slate-800/50"
                   }`}
                 >
-                  {u.username || u.email}
+                  <div 
+                    onClick={() => handleUserClick(u._id)}
+                    className="flex justify-between items-center cursor-pointer"
+                  >
+                    <span className="text-sm">{u.username || u.email}</span>
+                    {selectedUsers[u._id] && <i className="ri-check-line text-purple-400" />}
+                  </div>
+                  
+                  {selectedUsers[u._id] && (
+                    <div className="flex items-center gap-2 mt-1 border-t border-slate-700 pt-2">
+                      <span className="text-[10px] text-slate-400 uppercase">Role:</span>
+                      <select 
+                        value={selectedUsers[u._id]}
+                        onChange={(e) => handleRoleChange(u._id, e.target.value)}
+                        className="bg-slate-900 text-xs border border-slate-700 rounded px-1 py-0.5 outline-none focus:border-purple-500"
+                      >
+                        <option value="viewer">Viewer</option>
+                        <option value="tester">Tester</option>
+                        <option value="developer">Developer</option>
+                        <option value="admin">Admin</option>
+                      </select>
+                    </div>
+                  )}
                 </div>
               ))}
             </div>

@@ -37,7 +37,7 @@ const Register = () => {
 
       try {
         setLoading(true)
-        await axios.post('/users/register-start', { email, password })
+        await axios.post('/auth/register-start', { email, password })
         setStep('otp') // show OTP field
       } catch (err) {
         console.log(err?.response?.data || err)
@@ -58,7 +58,7 @@ const Register = () => {
 
       try {
         setLoading(true)
-        const res = await axios.post('/users/register-verify', {
+        const res = await axios.post('/auth/register-verify', {
           email,
           otp,
         })
@@ -98,10 +98,10 @@ const Register = () => {
           </div>
           <div className="text-left">
             <h1 className="text-xl font-semibold leading-tight">
-              {step === 'form' ? 'Join Syntara' : 'Verify your email'}
+              {step === 'form' ? 'Join ProjectPulse' : 'Verify Email'}
             </h1>
             <p className="text-xs text-slate-400">
-              {step === 'form' ? 'Create your account to get started.' : `We’ve sent an OTP to ${email}. Enter it to finish.`}
+              {step === 'form' ? 'Create your account' : `OTP sent to ${email}`}
             </p>
           </div>
         </div>

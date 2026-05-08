@@ -5,6 +5,7 @@ import { Server } from 'socket.io';
 import jwt from 'jsonwebtoken';
 import mongoose from 'mongoose';
 import projectModel from './models/project.model.js';
+import User from './models/user.model.js';
 import { generateResult } from './services/ai.service.js';
 
 const port = process.env.PORT || 3000;
@@ -15,6 +16,8 @@ const io = new Server(server, {
     origin: '*',
   },
 });
+
+const onlineUsers = new Map();
 
 // Socket auth middleware
 io.use(async (socket, next) => {
@@ -41,7 +44,12 @@ io.use(async (socket, next) => {
       return next(new Error('Authentication error'));
     }
 
-    socket.user = decoded;
+    const user = await User.findOne({ email: decoded.email }).select('_id email username role');
+    if (!user) {
+      return next(new Error('User not found'));
+    }
+
+    socket.user = user;
 
     next();
   } catch (error) {
@@ -52,9 +60,24 @@ io.use(async (socket, next) => {
 io.on('connection', (socket) => {
   socket.roomId = socket.project._id.toString();
 
-  console.log('a user connected');
+  console.log('a user connected:', socket.user.email);
 
   socket.join(socket.roomId);
+
+  // Track online users
+  onlineUsers.set(socket.user._id.toString(), {
+    ...socket.user.toObject(),
+    socketId: socket.id,
+  });
+
+  // Notify room about user presence
+  io.to(socket.roomId).emit('user-online', {
+    userId: socket.user._id,
+    user: socket.user,
+  });
+
+  // Send current online users to new user
+  socket.emit('online-users', Array.from(onlineUsers.values()));
 
   socket.on('project-message', async (data) => {
     const message = data.message;
@@ -105,8 +128,39 @@ io.on('connection', (socket) => {
     }
   });
 
+  // Real-time typing indicator
+  socket.on('typing', (data) => {
+    socket.broadcast.to(socket.roomId).emit('typing', {
+      ...data,
+      user: socket.user,
+    });
+  });
+
+  socket.on('stop-typing', () => {
+    socket.broadcast.to(socket.roomId).emit('stop-typing', {
+      userId: socket.user._id,
+    });
+  });
+
+  // Real-time task updates
+  socket.on('task-created', (task) => {
+    socket.broadcast.to(socket.roomId).emit('task-created', task);
+  });
+
+  socket.on('task-updated', (task) => {
+    socket.broadcast.to(socket.roomId).emit('task-updated', task);
+  });
+
+  socket.on('task-deleted', (taskId) => {
+    socket.broadcast.to(socket.roomId).emit('task-deleted', taskId);
+  });
+
   socket.on('disconnect', () => {
-    console.log('user disconnected');
+    console.log('user disconnected:', socket.user.email);
+    onlineUsers.delete(socket.user._id.toString());
+    io.to(socket.roomId).emit('user-offline', {
+      userId: socket.user._id,
+    });
     socket.leave(socket.roomId);
   });
 });
