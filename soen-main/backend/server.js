@@ -6,7 +6,7 @@ import jwt from 'jsonwebtoken';
 import mongoose from 'mongoose';
 import projectModel from './models/project.model.js';
 import User from './models/user.model.js';
-import { generateResult } from './services/ai.service.js';
+import { generateResult, generateResultStream } from './services/ai.service.js';
 
 const port = process.env.PORT || 3000;
 
@@ -88,39 +88,93 @@ io.on('connection', (socket) => {
     socket.broadcast.to(socket.roomId).emit('project-message', data);
 
     if (aiIsPresentInMessage) {
-      const prompt = message.replace('@ai', '');
+      const prompt = message.replace('@ai', '').trim() || "Hello";
+      console.log(`📩 AI Prompt from ${socket.user.email}: ${prompt}`);
 
       try {
-        // 🔹 Call AI service
-        const result = await generateResult(prompt);
+        const project = await projectModel.findById(socket.roomId);
+        const currentFileTree = project ? project.fileTree : {};
 
-      io.to(socket.roomId).emit('project-message', {
-        message: result, // should be JSON string { text, fileTree? }
-        sender: {
-          _id: 'ai',
-          email: 'AI',
-          username: 'AI',
-        },
-      });
-      } catch (err) {
-        console.error('AI error in socket handler:', err);
+        let fullResponse = "";
+        
+        // 🔹 Use Streaming for real-time feedback
+        await generateResultStream(prompt, currentFileTree, async (chunk, done) => {
+          if (done) {
+            console.log(`📤 AI Stream complete for room ${socket.roomId}`);
+            
+            // Always send the full response at the end, even if parsing fails
+            // This ensures the frontend receives the final data and stops streaming
+            io.to(socket.roomId).emit('project-message', {
+              message: fullResponse,
+              sender: { _id: 'ai', email: 'AI', username: 'AI' },
+            });
 
-        // 🔹 Build a safe fallback message similar to normal AI payload
-        const fallbackPayload = JSON.stringify({
-          text:
-            'AI assistant is currently unavailable. ' +
-            'Reason: quota exceeded or network error. ' +
-            'Please try again later or contact the administrator.',
-          fileTree: null,
+            try {
+              const parsedResult = JSON.parse(fullResponse);
+              
+              // Handle cases where AI returns a different structure
+              let aiFileTree = parsedResult.fileTree;
+              
+              if (!aiFileTree && parsedResult.filename) {
+                // Fallback if AI returns { filename, contents } instead of fileTree
+                aiFileTree = {
+                  [parsedResult.filename]: {
+                    file: { contents: parsedResult.contents || parsedResult.code || "" }
+                  }
+                };
+              }
+
+              if (aiFileTree && project) {
+                  const newFileTree = { ...project.fileTree };
+                  
+                  Object.keys(aiFileTree).forEach(key => {
+                    // 🚀 CRITICAL: Ignore numeric keys (AI sometimes returns arrays)
+                    if (/^\d+$/.test(key)) return;
+
+                    const aiFile = aiFileTree[key];
+                    if (aiFile.file && typeof aiFile.file.contents === 'string') {
+                      newFileTree[key] = aiFile;
+                    } else if (aiFile.directory) {
+                      newFileTree[key] = aiFile;
+                    } else if (typeof aiFile === 'string') {
+                      newFileTree[key] = { file: { contents: aiFile } };
+                    }
+                  });
+
+                  // 🧹 AUTO-CLEANUP: Remove existing numeric/junk keys from the tree
+                  const cleanedTree = {};
+                  Object.keys(newFileTree).forEach(k => {
+                    if (!/^\d+$/.test(k)) {
+                      cleanedTree[k] = newFileTree[k];
+                    }
+                  });
+
+                  project.fileTree = cleanedTree;
+                  await project.save();
+                  console.log("📁 AI updated the file tree safely (junk filtered) and saved to DB");
+                }
+            } catch (e) {
+              console.error("❌ Failed to parse AI JSON for fileTree update:", e.message);
+            }
+            return;
+          }
+
+          if (chunk) {
+            fullResponse += chunk;
+            // Send intermediate text to user for "typing" effect
+            io.to(socket.roomId).emit('ai-chunk', { chunk });
+          }
         });
 
+      } catch (err) {
+        console.error('❌ AI error in socket handler:', err.message);
+        const fallbackPayload = JSON.stringify({
+          text: `AI Error: ${err.message}.`,
+          fileTree: null,
+        });
         io.to(socket.roomId).emit('project-message', {
           message: fallbackPayload,
-          sender: {
-            _id: 'ai',
-            email: 'AI',
-            username: 'AI',
-          },
+          sender: { _id: 'ai', email: 'AI', username: 'AI' },
         });
       }
 

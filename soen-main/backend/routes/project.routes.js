@@ -51,5 +51,10 @@ router.get('/budget/:projectId',
     projectController.getBudgetData
 )
 
+router.delete('/:projectId',
+    authMiddleWare.authUser,
+    authMiddleWare.checkProjectRole(['owner']),
+    projectController.deleteProject
+)
 
 export default router;

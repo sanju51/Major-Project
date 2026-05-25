@@ -7,8 +7,153 @@ import {
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   PieChart, Pie, Cell, Legend
 } from 'recharts';
+import {
+  DndContext,
+  closestCorners,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  DragOverlay,
+  defaultDropAnimationSideEffects,
+} from "@dnd-kit/core";
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  verticalListSortingStrategy,
+  useSortable,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 
 const COLORS = ['#6366f1', '#a855f7', '#ec4899', '#f43f5e', '#f97316', '#eab308', '#22c55e', '#06b6d4'];
+
+const SortableTask = ({ task, columns, handleUpdateTaskStatus, handleUpdateTaskPriority }) => {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: task._id });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+  };
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      {...attributes}
+      {...listeners}
+      className="bg-slate-800/80 rounded-2xl p-4 border border-slate-700 group hover:border-indigo-500/50 transition-all shadow-sm hover:shadow-indigo-500/10 cursor-grab active:cursor-grabbing"
+    >
+      <div className="flex justify-between items-start mb-3">
+        <h4 className="font-bold text-sm text-slate-100 group-hover:text-indigo-300 transition">{task.title}</h4>
+        <div className="flex items-center gap-1" onClick={e => e.stopPropagation()}>
+          <select
+            value={task.status}
+            onChange={(e) => handleUpdateTaskStatus(task._id, e.target.value)}
+            className="bg-slate-900 text-[9px] rounded-md px-1.5 py-0.5 outline-none opacity-0 group-hover:opacity-100 transition font-bold uppercase tracking-tighter"
+          >
+            {columns.map(c => (
+              <option key={c.status} value={c.status}>{c.title}</option>
+            ))}
+          </select>
+        </div>
+      </div>
+      
+      {task.description && (
+        <p className="text-[11px] text-slate-400 mb-4 line-clamp-3 leading-relaxed font-medium">{task.description}</p>
+      )}
+
+      <div className="flex items-center justify-between pt-3 border-t border-slate-700/50" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center gap-2">
+          <select
+            value={task.priority}
+            onChange={(e) => handleUpdateTaskPriority(task._id, e.target.value)}
+            className={`text-[8px] px-2 py-0.5 rounded-full uppercase font-black outline-none border transition-colors ${
+              task.priority === "high" || task.priority === "urgent"
+                ? "bg-red-500/10 text-red-500 border-red-500/20"
+                : task.priority === "medium"
+                ? "bg-amber-500/10 text-amber-500 border-amber-500/20"
+                : "bg-emerald-500/10 text-emerald-500 border-emerald-500/20"
+            }`}
+          >
+            <option value="low">Low</option>
+            <option value="medium">Medium</option>
+            <option value="high">High</option>
+            <option value="urgent">Urgent</option>
+          </select>
+        </div>
+
+        {task.assignee ? (
+          <div 
+            className="h-7 w-7 rounded-full bg-gradient-to-tr from-indigo-600 to-purple-600 flex items-center justify-center text-[10px] font-bold shadow-md ring-2 ring-slate-800"
+            title={typeof task.assignee === 'object' ? (task.assignee.username || task.assignee.email) : 'User'}
+          >
+            {typeof task.assignee === 'object' 
+              ? (task.assignee.username || task.assignee.email || 'U').charAt(0).toUpperCase()
+              : 'U'}
+          </div>
+        ) : (
+          <div className="h-7 w-7 rounded-full bg-slate-700 border-2 border-dashed border-slate-600 flex items-center justify-center text-slate-500" title="Unassigned">
+            <i className="ri-user-add-line text-xs" />
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+const SortableColumn = ({ column, tasks, columns, handleUpdateTaskStatus, handleUpdateTaskPriority }) => {
+  const { setNodeRef } = useSortable({
+    id: column.id,
+    data: {
+      type: 'Column',
+      column,
+    },
+  });
+
+  const columnTasks = tasks.filter(t => t.status === column.status);
+
+  return (
+    <div ref={setNodeRef} className="bg-slate-800/30 backdrop-blur-md border border-slate-700/50 rounded-2xl p-4 flex flex-col min-h-[500px]">
+      <div className="flex justify-between items-center mb-5 px-1">
+        <h3 className="font-bold text-xs uppercase tracking-[0.2em] text-slate-500">{column.title}</h3>
+        <span className="bg-slate-800 text-slate-400 text-[10px] px-2 py-0.5 rounded-full font-bold">
+          {columnTasks.length}
+        </span>
+      </div>
+      <SortableContext
+        id={column.id}
+        items={columnTasks.map(t => t._id)}
+        strategy={verticalListSortingStrategy}
+      >
+        <div className="space-y-4 flex-grow">
+          {columnTasks.map((task) => (
+            <SortableTask
+              key={task._id}
+              task={task}
+              columns={columns}
+              handleUpdateTaskStatus={handleUpdateTaskStatus}
+              handleUpdateTaskPriority={handleUpdateTaskPriority}
+            />
+          ))}
+          {columnTasks.length === 0 && (
+            <div className="h-24 border-2 border-dashed border-slate-800 rounded-2xl flex items-center justify-center text-[10px] text-slate-600 font-bold uppercase tracking-widest">
+              Empty
+            </div>
+          )}
+        </div>
+      </SortableContext>
+    </div>
+  );
+};
 
 const ProjectDashboard = () => {
   const location = useLocation();
@@ -108,9 +253,45 @@ const ProjectDashboard = () => {
     }
   };
 
+  const sensors = useSensors(
+    useSensor(PointerSensor),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    })
+  );
+
+  const handleDragEnd = async (event) => {
+    const { active, over } = event;
+
+    if (!over) return;
+
+    if (active.id !== over.id) {
+      // Check if dropped over a column or another task
+      const overId = over.id;
+      
+      // Find the column by ID or find the task's status if dropped over a task
+      let targetStatus = null;
+      
+      const column = columns.find(c => c.id === overId);
+      if (column) {
+        targetStatus = column.status;
+      } else {
+        const overTask = tasks.find(t => t._id === overId);
+        if (overTask) targetStatus = overTask.status;
+      }
+      
+      if (targetStatus) {
+        const task = tasks.find(t => t._id === active.id);
+        if (task && task.status !== targetStatus) {
+          handleUpdateTaskStatus(active.id, targetStatus);
+        }
+      }
+    }
+  };
+
   const userInProject = project?.users?.find(u => (u.user?._id || u.user) === user._id);
   const userRole = userInProject?.role || 'viewer';
-  const isAuthorizedToCreate = ['owner', 'admin', 'developer'].includes(userRole);
+  const isAuthorizedToCreate = ['owner', 'admin', 'developer', 'tester'].includes(userRole);
 
   const columns = [
     { id: "backlog", title: "Backlog", status: "todo" },
@@ -229,88 +410,24 @@ const ProjectDashboard = () => {
           <i className="ri-kanban-view text-indigo-400" />
           Sprint Planning Board
         </h2>
-        <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mb-20">
-          {columns.map((column) => (
-            <div key={column.id} className="bg-slate-800/30 backdrop-blur-md border border-slate-700/50 rounded-2xl p-4 flex flex-col min-h-[500px]">
-              <div className="flex justify-between items-center mb-5 px-1">
-                <h3 className="font-bold text-xs uppercase tracking-[0.2em] text-slate-500">{column.title}</h3>
-                <span className="bg-slate-800 text-slate-400 text-[10px] px-2 py-0.5 rounded-full font-bold">
-                  {tasks.filter(t => t.status === column.status).length}
-                </span>
-              </div>
-              <div className="space-y-4 flex-grow">
-                {tasks
-                  .filter((task) => task.status === column.status)
-                  .map((task) => (
-                    <div
-                      key={task._id}
-                      className="bg-slate-800/80 rounded-2xl p-4 border border-slate-700 group hover:border-indigo-500/50 transition-all shadow-sm hover:shadow-indigo-500/10 cursor-pointer"
-                    >
-                      <div className="flex justify-between items-start mb-3">
-                        <h4 className="font-bold text-sm text-slate-100 group-hover:text-indigo-300 transition">{task.title}</h4>
-                        <div className="flex items-center gap-1">
-                          <select
-                            value={task.status}
-                            onChange={(e) => handleUpdateTaskStatus(task._id, e.target.value)}
-                            className="bg-slate-900 text-[9px] rounded-md px-1.5 py-0.5 outline-none opacity-0 group-hover:opacity-100 transition font-bold uppercase tracking-tighter"
-                          >
-                            {columns.map(c => (
-                              <option key={c.status} value={c.status}>{c.title}</option>
-                            ))}
-                          </select>
-                        </div>
-                      </div>
-                      
-                      {task.description && (
-                        <p className="text-[11px] text-slate-400 mb-4 line-clamp-3 leading-relaxed font-medium">{task.description}</p>
-                      )}
-
-                      <div className="flex items-center justify-between pt-3 border-t border-slate-700/50">
-                        <div className="flex items-center gap-2">
-                          <select
-                            value={task.priority}
-                            onChange={(e) => handleUpdateTaskPriority(task._id, e.target.value)}
-                            className={`text-[8px] px-2 py-0.5 rounded-full uppercase font-black outline-none border transition-colors ${
-                              task.priority === "high" || task.priority === "urgent"
-                                ? "bg-red-500/10 text-red-500 border-red-500/20"
-                                : task.priority === "medium"
-                                ? "bg-amber-500/10 text-amber-500 border-amber-500/20"
-                                : "bg-emerald-500/10 text-emerald-500 border-emerald-500/20"
-                            }`}
-                          >
-                            <option value="low">Low</option>
-                            <option value="medium">Medium</option>
-                            <option value="high">High</option>
-                            <option value="urgent">Urgent</option>
-                          </select>
-                        </div>
-
-                        {task.assignee ? (
-                          <div 
-                            className="h-7 w-7 rounded-full bg-gradient-to-tr from-indigo-600 to-purple-600 flex items-center justify-center text-[10px] font-bold shadow-md ring-2 ring-slate-800"
-                            title={typeof task.assignee === 'object' ? (task.assignee.username || task.assignee.email) : 'User'}
-                          >
-                            {typeof task.assignee === 'object' 
-                              ? (task.assignee.username || task.assignee.email || 'U').charAt(0).toUpperCase()
-                              : 'U'}
-                          </div>
-                        ) : (
-                          <div className="h-7 w-7 rounded-full bg-slate-700 border-2 border-dashed border-slate-600 flex items-center justify-center text-slate-500" title="Unassigned">
-                            <i className="ri-user-add-line text-xs" />
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  ))}
-                {tasks.filter(t => t.status === column.status).length === 0 && (
-                  <div className="h-24 border-2 border-dashed border-slate-800 rounded-2xl flex items-center justify-center text-[10px] text-slate-600 font-bold uppercase tracking-widest">
-                    Empty
-                  </div>
-                )}
-              </div>
-            </div>
-          ))}
-        </div>
+        <DndContext
+          sensors={sensors}
+          collisionDetection={closestCorners}
+          onDragEnd={handleDragEnd}
+        >
+          <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mb-20">
+            {columns.map((column) => (
+              <SortableColumn
+                key={column.id}
+                column={column}
+                tasks={tasks}
+                columns={columns}
+                handleUpdateTaskStatus={handleUpdateTaskStatus}
+                handleUpdateTaskPriority={handleUpdateTaskPriority}
+              />
+            ))}
+          </div>
+        </DndContext>
       </div>
 
       {/* Task Creation Modal */}

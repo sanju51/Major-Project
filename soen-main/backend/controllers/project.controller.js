@@ -51,6 +51,7 @@ export const getAllProject = async (req, res) => {
       return res.status(401).json("Unauthorized");
     }
 
+    // Explicitly check both owner and users array to ensure visibility
     const projects = await Project.find({
       $or: [
         { owner: userId },
@@ -59,7 +60,8 @@ export const getAllProject = async (req, res) => {
     })
       .populate("users.user", "email username")
       .populate("owner", "email username")
-      .sort({ createdAt: -1 });
+      .select("-fileTree") // Optimization: Don't fetch large fileTree in the list view
+      .sort({ updatedAt: -1 });
 
     return res.json({ projects });
   } catch (err) {
@@ -198,17 +200,52 @@ export const getGanttData = async (req, res) => {
 export const getBudgetData = async (req, res) => {
   try {
     const { projectId } = req.params;
-    const project = await Project.findById(projectId);
-    if (!project) return res.status(404).json("Project not found");
+    const expenses = await mongoose.model('expense').find({ project: projectId });
+    
+    const budgetData = {
+      totalBudget: 10000, // example
+      spent: expenses.reduce((acc, exp) => acc + (exp.amount || 0), 0),
+      remaining: 0
+    };
+    budgetData.remaining = budgetData.totalBudget - budgetData.spent;
 
-    res.json({
-      budget: project.budget,
-      spent: project.spent,
-      remaining: project.budget - project.spent,
-      utilizationRate: project.budget > 0 ? (project.spent / project.budget) * 100 : 0
-    });
+    res.json(budgetData);
   } catch (err) {
     console.error(err);
     res.status(500).json("Failed to fetch budget data");
+  }
+};
+
+export const deleteProject = async (req, res) => {
+  try {
+    const { projectId } = req.params;
+    const userId = req.user?._id;
+
+    if (!mongoose.Types.ObjectId.isValid(projectId)) {
+      return res.status(400).json("Invalid project ID");
+    }
+
+    const project = await Project.findById(projectId);
+    if (!project) {
+      return res.status(404).json("Project not found");
+    }
+
+    // Only owner can delete
+    if (project.owner.toString() !== userId.toString()) {
+      return res.status(403).json("Only project owner can delete the project");
+    }
+
+    // Delete associated data
+    await Promise.all([
+      mongoose.model('task').deleteMany({ project: projectId }),
+      mongoose.model('document').deleteMany({ project: projectId }),
+      mongoose.model('activity').deleteMany({ project: projectId }),
+      Project.findByIdAndDelete(projectId)
+    ]);
+
+    return res.json({ message: "Project and all associated data deleted successfully" });
+  } catch (err) {
+    console.error("Delete project error:", err);
+    return res.status(500).json("Failed to delete project");
   }
 };

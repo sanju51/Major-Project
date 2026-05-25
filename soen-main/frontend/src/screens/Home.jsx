@@ -123,6 +123,24 @@ const Home = () => {
     }
   }
 
+  const [deletingId, setDeletingId] = useState(null);
+
+  const handleDeleteProject = async (e, projectId) => {
+    e.stopPropagation();
+    if (!window.confirm("Are you sure you want to delete this project?")) return;
+
+    try {
+      setDeletingId(projectId);
+      await axios.delete(`/projects/${projectId}`);
+      setProjects(prev => prev.filter(p => p._id !== projectId));
+    } catch (err) {
+      console.error("Delete failed:", err);
+      alert("Only the project owner can delete this project.");
+    } finally {
+      setDeletingId(null);
+    }
+  };
+
   useEffect(() => {
     axios
       .get('/projects/all')
@@ -275,7 +293,16 @@ const Home = () => {
                         </p>
                       </div>
                     </div>
-                    <i className="ri-arrow-right-up-line text-slate-300 dark:text-slate-500 group-hover:text-purple-500 transition text-lg" />
+                    <div className="flex items-center gap-2">
+                      <button 
+                        onClick={(e) => handleDeleteProject(e, project._id)}
+                        className="p-1.5 rounded-lg bg-red-500/10 text-red-500 opacity-0 group-hover:opacity-100 transition hover:bg-red-500 hover:text-white"
+                        title="Delete Project"
+                      >
+                        <i className={deletingId === project._id ? "ri-loader-4-line animate-spin" : "ri-delete-bin-line"} />
+                      </button>
+                      <i className="ri-arrow-right-up-line text-slate-300 dark:text-slate-500 group-hover:text-purple-500 transition text-lg" />
+                    </div>
                   </div>
 
                   {project.description && (
