@@ -32,12 +32,24 @@ const ProjectDashboard = () => {
   const fetchData = async () => {
     try {
       if (project?._id) {
-        const [tasksRes, analyticsRes] = await Promise.all([
+        // Fetch tasks and project details
+        const [tasksRes, projectRes] = await Promise.all([
           axios.get(`/tasks/project/${project._id}`),
-          axios.get(`/analytics/project/${project._id}`),
+          axios.get(`/projects/get-project/${project._id}`),
         ]);
+        
         setTasks(tasksRes.data.tasks);
-        setAnalytics(analyticsRes.data);
+        if (projectRes.data.project) {
+          setProject(projectRes.data.project);
+        }
+
+        // Fetch analytics separately (non-blocking)
+        try {
+          const analyticsRes = await axios.get(`/analytics/project/${project._id}`);
+          setAnalytics(analyticsRes.data);
+        } catch (err) {
+          console.warn("Could not fetch analytics:", err);
+        }
       }
     } catch (err) {
       console.error("Failed to fetch project data:", err);
@@ -53,10 +65,17 @@ const ProjectDashboard = () => {
   const handleCreateTask = async (e) => {
     e.preventDefault();
     try {
-      await axios.post("/tasks", {
+      const payload = {
         ...newTask,
         project: project._id,
-      });
+      };
+      
+      // Ensure assignee is either a valid ID or removed from payload if empty
+      if (!payload.assignee) {
+        delete payload.assignee;
+      }
+
+      await axios.post("/tasks", payload);
       setIsModalOpen(false);
       setNewTask({
         title: "",
@@ -67,7 +86,7 @@ const ProjectDashboard = () => {
       });
       fetchData();
     } catch (err) {
-      console.error("Failed to create task:", err);
+      console.error("Failed to create task:", err?.response?.data || err);
     }
   };
 
@@ -89,12 +108,16 @@ const ProjectDashboard = () => {
     }
   };
 
+  const userInProject = project?.users?.find(u => (u.user?._id || u.user) === user._id);
+  const userRole = userInProject?.role || 'viewer';
+  const isAuthorizedToCreate = ['owner', 'admin', 'developer'].includes(userRole);
+
   const columns = [
-    { id: "todo", title: "To Do", status: "todo" },
-    { id: "in-progress", title: "In Progress", status: "in-progress" },
-    { id: "in-review", title: "In Review", status: "in-review" },
-    { id: "tested", title: "Tested", status: "tested" },
-    { id: "completed", title: "Completed", status: "completed" },
+    { id: "backlog", title: "Backlog", status: "todo" },
+    { id: "sprint-ready", title: "Sprint Ready", status: "in-progress" },
+    { id: "in-development", title: "In Development", status: "in-review" },
+    { id: "testing", title: "Testing & QA", status: "tested" },
+    { id: "done", title: "Done", status: "completed" },
   ];
 
   if (loading) {
@@ -118,12 +141,14 @@ const ProjectDashboard = () => {
             </button>
             <h1 className="text-3xl font-bold">{project?.name}</h1>
           </div>
-          <button
-            onClick={() => setIsModalOpen(true)}
-            className="px-6 py-2 bg-indigo-600 rounded-full font-bold hover:bg-indigo-700 transition shadow-lg shadow-indigo-500/20"
-          >
-            + New Task
-          </button>
+          {isAuthorizedToCreate && (
+            <button
+              onClick={() => setIsModalOpen(true)}
+              className="px-6 py-2 bg-indigo-600 rounded-full font-bold hover:bg-indigo-700 transition shadow-lg shadow-indigo-500/20"
+            >
+              + New Task
+            </button>
+          )}
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
@@ -200,47 +225,57 @@ const ProjectDashboard = () => {
           </div>
         </div>
 
-        <h2 className="text-2xl font-semibold mb-4">Kanban Board</h2>
-        <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+        <h2 className="text-2xl font-bold mb-4 flex items-center gap-3">
+          <i className="ri-kanban-view text-indigo-400" />
+          Sprint Planning Board
+        </h2>
+        <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mb-20">
           {columns.map((column) => (
-            <div key={column.id} className="bg-slate-800/50 backdrop-blur-md border border-slate-700 rounded-xl p-4">
-              <h3 className="font-semibold mb-4">{column.title}</h3>
-              <div className="space-y-3">
+            <div key={column.id} className="bg-slate-800/30 backdrop-blur-md border border-slate-700/50 rounded-2xl p-4 flex flex-col min-h-[500px]">
+              <div className="flex justify-between items-center mb-5 px-1">
+                <h3 className="font-bold text-xs uppercase tracking-[0.2em] text-slate-500">{column.title}</h3>
+                <span className="bg-slate-800 text-slate-400 text-[10px] px-2 py-0.5 rounded-full font-bold">
+                  {tasks.filter(t => t.status === column.status).length}
+                </span>
+              </div>
+              <div className="space-y-4 flex-grow">
                 {tasks
                   .filter((task) => task.status === column.status)
                   .map((task) => (
                     <div
                       key={task._id}
-                      className="bg-slate-700/50 rounded-lg p-3 border border-slate-600 group hover:border-indigo-500/50 transition"
+                      className="bg-slate-800/80 rounded-2xl p-4 border border-slate-700 group hover:border-indigo-500/50 transition-all shadow-sm hover:shadow-indigo-500/10 cursor-pointer"
                     >
-                      <div className="flex justify-between items-start mb-2">
-                        <h4 className="font-bold text-sm">{task.title}</h4>
-                        <select
-                          value={task.status}
-                          onChange={(e) => handleUpdateTaskStatus(task._id, e.target.value)}
-                          className="bg-slate-800 text-[10px] rounded px-1 py-0.5 outline-none opacity-0 group-hover:opacity-100 transition"
-                        >
-                          {columns.map(c => (
-                            <option key={c.status} value={c.status}>{c.title}</option>
-                          ))}
-                        </select>
+                      <div className="flex justify-between items-start mb-3">
+                        <h4 className="font-bold text-sm text-slate-100 group-hover:text-indigo-300 transition">{task.title}</h4>
+                        <div className="flex items-center gap-1">
+                          <select
+                            value={task.status}
+                            onChange={(e) => handleUpdateTaskStatus(task._id, e.target.value)}
+                            className="bg-slate-900 text-[9px] rounded-md px-1.5 py-0.5 outline-none opacity-0 group-hover:opacity-100 transition font-bold uppercase tracking-tighter"
+                          >
+                            {columns.map(c => (
+                              <option key={c.status} value={c.status}>{c.title}</option>
+                            ))}
+                          </select>
+                        </div>
                       </div>
                       
                       {task.description && (
-                        <p className="text-[11px] text-slate-400 mb-3 line-clamp-2 leading-tight">{task.description}</p>
+                        <p className="text-[11px] text-slate-400 mb-4 line-clamp-3 leading-relaxed font-medium">{task.description}</p>
                       )}
 
-                      <div className="flex items-center justify-between mt-auto">
+                      <div className="flex items-center justify-between pt-3 border-t border-slate-700/50">
                         <div className="flex items-center gap-2">
                           <select
                             value={task.priority}
                             onChange={(e) => handleUpdateTaskPriority(task._id, e.target.value)}
-                            className={`text-[9px] px-1.5 py-0.5 rounded uppercase font-extrabold outline-none ${
+                            className={`text-[8px] px-2 py-0.5 rounded-full uppercase font-black outline-none border transition-colors ${
                               task.priority === "high" || task.priority === "urgent"
-                                ? "bg-red-500/20 text-red-400"
+                                ? "bg-red-500/10 text-red-500 border-red-500/20"
                                 : task.priority === "medium"
-                                ? "bg-amber-500/20 text-amber-400"
-                                : "bg-emerald-500/20 text-emerald-400"
+                                ? "bg-amber-500/10 text-amber-500 border-amber-500/20"
+                                : "bg-emerald-500/10 text-emerald-500 border-emerald-500/20"
                             }`}
                           >
                             <option value="low">Low</option>
@@ -250,17 +285,28 @@ const ProjectDashboard = () => {
                           </select>
                         </div>
 
-                        {task.assignee && (
+                        {task.assignee ? (
                           <div 
-                            className="h-6 w-6 rounded-full bg-indigo-500 flex items-center justify-center text-[10px] font-bold shadow-sm"
-                            title={task.assignee.username || task.assignee.email}
+                            className="h-7 w-7 rounded-full bg-gradient-to-tr from-indigo-600 to-purple-600 flex items-center justify-center text-[10px] font-bold shadow-md ring-2 ring-slate-800"
+                            title={typeof task.assignee === 'object' ? (task.assignee.username || task.assignee.email) : 'User'}
                           >
-                            {(task.assignee.username || task.assignee.email || 'U').charAt(0).toUpperCase()}
+                            {typeof task.assignee === 'object' 
+                              ? (task.assignee.username || task.assignee.email || 'U').charAt(0).toUpperCase()
+                              : 'U'}
+                          </div>
+                        ) : (
+                          <div className="h-7 w-7 rounded-full bg-slate-700 border-2 border-dashed border-slate-600 flex items-center justify-center text-slate-500" title="Unassigned">
+                            <i className="ri-user-add-line text-xs" />
                           </div>
                         )}
                       </div>
                     </div>
                   ))}
+                {tasks.filter(t => t.status === column.status).length === 0 && (
+                  <div className="h-24 border-2 border-dashed border-slate-800 rounded-2xl flex items-center justify-center text-[10px] text-slate-600 font-bold uppercase tracking-widest">
+                    Empty
+                  </div>
+                )}
               </div>
             </div>
           ))}

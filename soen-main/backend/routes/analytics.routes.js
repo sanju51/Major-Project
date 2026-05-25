@@ -7,6 +7,6 @@ const router = express.Router();
 router.use(verifyJWT);
 
 router.get('/dashboard', getDashboardStats);
-router.get('/project/:projectId', checkProjectRole(['owner', 'admin']), getProjectAnalytics);
+router.get('/project/:projectId', checkProjectRole(['owner', 'admin', 'developer', 'tester', 'viewer']), getProjectAnalytics);
 
 export default router;

@@ -37,7 +37,7 @@ export const authorizeRoles = (...roles) => {
 export const checkProjectRole = (allowedRoles) => {
   return async (req, res, next) => {
     try {
-      const projectId = req.params.projectId || req.body.projectId;
+      const projectId = req.params.projectId || req.body.projectId || req.body.project;
       if (!projectId) {
         return res.status(400).json("Project ID is required");
       }

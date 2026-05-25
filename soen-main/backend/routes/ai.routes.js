@@ -8,5 +8,6 @@ router.post('/generate-subtasks', verifyJWT, aiController.generateSubtasks);
 router.post('/suggest-deadline', verifyJWT, aiController.suggestDeadline);
 router.post('/summarize-meeting', verifyJWT, aiController.summarizeMeeting);
 router.post('/predict-risks', verifyJWT, aiController.predictRisks);
+router.post('/divide-tasks', verifyJWT, aiController.divideTasks);
 
 export default router;

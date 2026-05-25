@@ -81,3 +81,17 @@ export const predictRisks = async (req, res) => {
     return res.status(500).json({ message: 'Failed to predict risks' });
   }
 };
+
+export const divideTasks = async (req, res) => {
+  try {
+    const { documentContent, projectContext } = req.body;
+    if (!documentContent) {
+      return res.status(400).json({ message: 'Document content is required' });
+    }
+    const tasks = await ai.divideTasksFromDocument(documentContent, projectContext);
+    return res.json({ tasks });
+  } catch (error) {
+    console.error('AI divide tasks error:', error);
+    return res.status(500).json({ message: 'Failed to divide tasks' });
+  }
+};

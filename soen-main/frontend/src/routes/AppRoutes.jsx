@@ -6,6 +6,7 @@ import Home from '../screens/Home'
 import Project from '../screens/Project'
 import ProjectDashboard from '../screens/ProjectDashboard'
 import Profile from '../screens/Profile'
+import Onboarding from '../screens/Onboarding'
 import UserAuth from '../auth/UserAuth'
 
 const AppRoutes = () => {
@@ -18,6 +19,7 @@ const AppRoutes = () => {
                 <Route path="/project" element={<UserAuth><Project /></UserAuth>} />
                 <Route path="/project-dashboard" element={<UserAuth><ProjectDashboard /></UserAuth>} />
                 <Route path="/profile" element={<UserAuth><Profile /></UserAuth>} />
+                <Route path="/onboarding" element={<UserAuth><Onboarding /></UserAuth>} />
             </Routes>
 
         </BrowserRouter>

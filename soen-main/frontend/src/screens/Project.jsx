@@ -427,6 +427,39 @@ const Project = () => {
             >
               <i className={theme === 'dark' ? 'ri-sun-line text-indigo-400' : 'ri-moon-line text-indigo-600'} />
             </button>
+            <div className="relative group">
+              <button className="flex items-center gap-2 p-1.5 bg-slate-100 dark:bg-slate-800 rounded-md hover:bg-slate-200 dark:hover:bg-slate-700 transition">
+                <div className="h-6 w-6 rounded-full bg-gradient-to-tr from-indigo-500 to-purple-500 flex items-center justify-center text-[10px] font-bold text-white">
+                  {(user?.username || user?.email || 'U').charAt(0).toUpperCase()}
+                </div>
+                <i className="ri-arrow-down-s-line text-sm text-slate-500" />
+              </button>
+              
+              {/* Dropdown Menu */}
+              <div className="absolute right-0 top-full mt-2 w-48 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl shadow-xl overflow-hidden opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-50">
+                <div className="px-4 py-3 border-b border-slate-100 dark:border-slate-800">
+                  <p className="text-xs font-bold text-slate-800 dark:text-slate-100 truncate">{user?.username || 'User'}</p>
+                  <p className="text-[10px] text-slate-500 truncate">{user?.email}</p>
+                </div>
+                <button
+                  onClick={() => navigate('/profile')}
+                  className="w-full flex items-center gap-3 px-4 py-2.5 text-xs font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 transition"
+                >
+                  <i className="ri-user-line text-indigo-500" />
+                  View Profile
+                </button>
+                <button
+                  onClick={() => {
+                    localStorage.removeItem('token');
+                    window.location.href = '/login';
+                  }}
+                  className="w-full flex items-center gap-3 px-4 py-2.5 text-xs font-medium text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30 transition"
+                >
+                  <i className="ri-logout-box-line" />
+                  Logout
+                </button>
+              </div>
+            </div>
             <button
               onClick={() => navigate('/project-dashboard', { state: { project } })}
               className="p-1.5 bg-slate-100 dark:bg-slate-800 rounded-md hover:bg-slate-200 dark:hover:bg-slate-700 transition flex items-center gap-1.5 px-3"
@@ -650,39 +683,42 @@ const Project = () => {
             <button
               className="text-xs px-2 py-1 rounded bg-slate-800 hover:bg-slate-700"
               onClick={async () => {
-                const name = prompt(
-                  "New file path (e.g., index.html or src/app.js)"
-                );
+                const name = prompt("New file path (e.g., index.js or src/main.js)");
                 if (!name) return;
-                const trimmed = name.trim();
+                let trimmed = name.trim().replace(/^\.\//, "");
                 if (!trimmed) return;
-                if (fileTree[trimmed]) return;
 
-                const newTree = {
-                  ...fileTree,
-                  [trimmed]: { file: { contents: "" } },
-                };
+                // 📁 Handle nested creation automatically
+                const newTree = { ...fileTree };
+                const parts = trimmed.split("/");
+                
+                // If it's a nested file, ensure parent directories exist in state
+                if (parts.length > 1) {
+                  let currentPath = "";
+                  for (let i = 0; i < parts.length - 1; i++) {
+                    currentPath += (currentPath ? "/" : "") + parts[i];
+                    if (!newTree[currentPath]) {
+                      newTree[currentPath] = { directory: {} };
+                    }
+                  }
+                }
+
+                if (newTree[trimmed]) return;
+                newTree[trimmed] = { file: { contents: "" } };
+                
                 setFileTree(newTree);
                 saveFileTree(newTree);
 
                 try {
                   if (webContainer) {
-                    const parts = trimmed.split("/");
-                    if (parts.length > 1) {
-                      const dirPath = parts.slice(0, -1).join("/");
-                      try {
-                        await webContainer.fs.mkdir(dirPath, {
-                          recursive: true,
-                        });
-                      } catch {}
+                    const dirPath = parts.slice(0, -1).join("/");
+                    if (dirPath) {
+                      await webContainer.fs.mkdir(dirPath, { recursive: true });
                     }
                     await webContainer.fs.writeFile(trimmed, "");
                   }
                 } catch (e) {
-                  console.log(
-                    "Failed to create file in WebContainer",
-                    e
-                  );
+                  console.error("WebContainer create file error:", e);
                 }
 
                 setCurrentFile(trimmed);
@@ -694,52 +730,80 @@ const Project = () => {
             <button
               className="text-xs px-2 py-1 rounded bg-slate-800 hover:bg-slate-700"
               onClick={async () => {
-                const name = prompt(
-                  "New folder path (e.g., src or assets/images)"
-                );
+                const name = prompt("New folder path (e.g., src or assets/images)");
                 if (!name) return;
-                let trimmed = name.trim();
+                let trimmed = name.trim().replace(/^\.\//, "");
                 if (!trimmed) return;
-                // normalize: no leading './', ensure no trailing spaces
-                trimmed = trimmed.replace(/^\.\//, "");
-                if (fileTree[trimmed]) return;
 
-                const newTree = {
-                  ...fileTree,
-                  [trimmed]: { directory: {} },
-                };
+                const newTree = { ...fileTree };
+                const parts = trimmed.split("/");
+                let currentPath = "";
+                
+                for (const part of parts) {
+                  currentPath += (currentPath ? "/" : "") + part;
+                  if (!newTree[currentPath]) {
+                    newTree[currentPath] = { directory: {} };
+                  }
+                }
+
                 setFileTree(newTree);
                 saveFileTree(newTree);
 
                 try {
                   if (webContainer) {
-                    await webContainer.fs.mkdir(trimmed, {
-                      recursive: true,
-                    });
+                    await webContainer.fs.mkdir(trimmed, { recursive: true });
                   }
                 } catch (e) {
-                  console.log(
-                    "Failed to create folder in WebContainer",
-                    e
-                  );
+                  console.error("WebContainer create folder error:", e);
                 }
               }}
             >
               New Folder
             </button>
           </div>
-          {Object.keys(fileTree).map((file) => (
-            <button
-              key={file}
-              className="w-full text-left px-4 py-2 hover:bg-slate-800 text-xs truncate"
-              onClick={() => {
-                setCurrentFile(file);
-                setOpenFiles((prev) => [...new Set([...prev, file])]);
-              }}
-            >
-              {fileTree[file]?.file ? "📄" : "📁"} {file}
-            </button>
-          ))}
+          <div className="flex flex-col flex-grow overflow-auto">
+            {Object.keys(fileTree).sort().map((file) => (
+              <div key={file} className="group flex items-center justify-between hover:bg-slate-800 transition-colors px-4">
+                <button
+                  className="flex-grow text-left py-2 text-xs truncate flex items-center gap-2"
+                  onClick={() => {
+                    if (fileTree[file]?.file) {
+                      setCurrentFile(file);
+                      setOpenFiles((prev) => [...new Set([...prev, file])]);
+                    }
+                  }}
+                >
+                  <span className="text-sm">
+                    {fileTree[file]?.file ? "📄" : "📁"}
+                  </span>
+                  <span className="truncate">{file}</span>
+                </button>
+                <button
+                  onClick={async (e) => {
+                    e.stopPropagation();
+                    if (!confirm(`Are you sure you want to delete ${file}?`)) return;
+                    
+                    const newTree = { ...fileTree };
+                    delete newTree[file];
+                    setFileTree(newTree);
+                    saveFileTree(newTree);
+
+                    try {
+                      if (webContainer) {
+                        await webContainer.fs.rm(file, { recursive: true });
+                      }
+                    } catch (err) {
+                      console.error("Failed to delete from WebContainer:", err);
+                    }
+                  }}
+                  className="opacity-0 group-hover:opacity-100 p-1 hover:text-red-500 transition-all"
+                  title="Delete"
+                >
+                  <i className="ri-delete-bin-line text-sm" />
+                </button>
+              </div>
+            ))}
+          </div>
         </aside>
 
         {/* NEW: Resizer between File Tree and Editor */}

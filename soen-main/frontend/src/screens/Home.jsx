@@ -57,6 +57,43 @@ const Home = () => {
             'Content-Type': 'multipart/form-data',
           },
         })
+
+        // 🤖 NEW: AI Task Division from document
+        try {
+          let documentText = `Document Name: ${projectFiles.name}.`;
+          
+          // Try to read file content if it's a text file
+          if (projectFiles.type.startsWith('text/') || projectFiles.name.endsWith('.md') || projectFiles.name.endsWith('.json')) {
+            const reader = new FileReader();
+            const content = await new Promise((resolve) => {
+              reader.onload = (e) => resolve(e.target.result);
+              reader.readAsText(projectFiles);
+            });
+            documentText += `\n\nContent:\n${content}`;
+          }
+
+          const aiRes = await axios.post('/ai/divide-tasks', {
+            documentContent: documentText,
+            projectContext: {
+              name: projectName,
+              description: projectDescription,
+              category: projectCategory,
+              priority: projectPriority
+            }
+          });
+
+          if (aiRes.data.tasks && aiRes.data.tasks.length > 0) {
+            // Auto-create tasks divided by AI
+            await Promise.all(aiRes.data.tasks.map(task => 
+              axios.post('/tasks', {
+                ...task,
+                project: created._id
+              })
+            ));
+          }
+        } catch (aiErr) {
+          console.error("AI Task Division failed:", aiErr);
+        }
       }
 
       if (created) {
@@ -125,11 +162,45 @@ const Home = () => {
 
             <button
               onClick={() => navigate('/profile')}
-              className="p-2.5 rounded-full bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-300 dark:hover:bg-slate-700 transition shadow-sm"
+              className="relative p-2.5 rounded-full bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-300 dark:hover:bg-slate-700 transition shadow-sm"
               title="View Profile"
             >
               <i className="ri-user-line text-lg" />
             </button>
+
+            <div className="relative group">
+              <button className="flex items-center gap-2 p-1.5 rounded-full bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-300 dark:hover:bg-slate-700 transition shadow-sm">
+                <div className="h-7 w-7 rounded-full bg-gradient-to-tr from-indigo-500 to-purple-500 flex items-center justify-center text-xs font-bold text-white">
+                  {(user?.username || user?.email || 'U').charAt(0).toUpperCase()}
+                </div>
+                <i className="ri-arrow-down-s-line text-sm" />
+              </button>
+              
+              {/* Dropdown Menu */}
+              <div className="absolute right-0 top-full mt-2 w-48 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl shadow-xl shadow-slate-900/20 overflow-hidden opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-50">
+                <div className="px-4 py-3 border-b border-slate-100 dark:border-slate-800">
+                  <p className="text-xs font-bold text-slate-800 dark:text-slate-100 truncate">{user?.username || 'User'}</p>
+                  <p className="text-[10px] text-slate-500 truncate">{user?.email}</p>
+                </div>
+                <button
+                  onClick={() => navigate('/profile')}
+                  className="w-full flex items-center gap-3 px-4 py-2.5 text-xs font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 transition"
+                >
+                  <i className="ri-user-line text-indigo-500" />
+                  View Profile
+                </button>
+                <button
+                  onClick={() => {
+                    localStorage.removeItem('token');
+                    window.location.href = '/login';
+                  }}
+                  className="w-full flex items-center gap-3 px-4 py-2.5 text-xs font-medium text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30 transition"
+                >
+                  <i className="ri-logout-box-line" />
+                  Logout
+                </button>
+              </div>
+            </div>
 
             <button
               onClick={() => setIsModalOpen(true)}
@@ -334,6 +405,22 @@ const Home = () => {
                       placeholder="Describe the project scope and objectives..."
                     />
                   </div>
+                </div>
+
+                <div className="md:col-span-2">
+                  <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-2">
+                    Requirements Document (AI Analysis)
+                  </label>
+                  <div className="relative">
+                    <input
+                      type="file"
+                      onChange={(e) => setProjectFiles(e.target.files[0])}
+                      className="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-950/60 px-4 py-3 text-xs text-slate-500 file:mr-4 file:py-1.5 file:px-4 file:rounded-full file:border-0 file:text-xs file:font-bold file:bg-indigo-500/10 file:text-indigo-600 dark:file:text-indigo-400 hover:file:bg-indigo-500/20 transition"
+                    />
+                  </div>
+                  <p className="mt-2 text-[10px] text-slate-400 italic font-medium">
+                    Upload a .txt or .md file to automatically generate tasks using AI.
+                  </p>
                 </div>
               </div>
 

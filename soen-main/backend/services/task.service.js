@@ -7,7 +7,10 @@ export const createTask = async (taskData) => {
 };
 
 export const getTasksByProject = async (projectId) => {
-  return await Task.find({ project: projectId }).populate('assignee createdBy comments.user');
+  return await Task.find({ project: projectId })
+    .populate('assignee', 'username email avatar')
+    .populate('createdBy', 'username email')
+    .populate('comments.user', 'username email');
 };
 
 export const getTaskById = async (taskId) => {

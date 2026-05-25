@@ -177,3 +177,31 @@ Return JSON with: { "delayedTasks": [ { "taskId": "string", "reason": "string" }
     const result = await model.generateContent(JSON.stringify(projectData));
     return result.response.text();
 };
+
+export const divideTasksFromDocument = async (documentContent, projectContext) => {
+    const model = genAI.getGenerativeModel({ 
+        model: "gemini-2.0-flash-lite",
+        generationConfig: {
+            responseMimeType: "application/json",
+        }
+    });
+    
+    const prompt = `You are a project manager. Analyze the following document content and project context. 
+    Break down the project into granular tasks. 
+    For each task, provide: title, description, priority (low, medium, high, urgent), and suggested status (todo).
+    
+    Project Context: ${JSON.stringify(projectContext)}
+    Document Content: ${documentContent}
+    
+    Return a JSON array of task objects.`;
+    
+    const result = await model.generateContent(prompt);
+    const responseText = result.response.text();
+    try {
+        return JSON.parse(responseText);
+    } catch (e) {
+        // Fallback if AI doesn't return pure JSON
+        console.error("AI Task Division JSON parse error:", e);
+        return [];
+    }
+};

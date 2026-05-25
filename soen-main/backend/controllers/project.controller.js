@@ -47,16 +47,23 @@ export const getAllProject = async (req, res) => {
   try {
     const userId = req.user?._id;
 
-    const projects = await Project.find(
-      userId ? { "users.user": userId } : {}
-    )
+    if (!userId) {
+      return res.status(401).json("Unauthorized");
+    }
+
+    const projects = await Project.find({
+      $or: [
+        { owner: userId },
+        { "users.user": userId }
+      ]
+    })
       .populate("users.user", "email username")
       .populate("owner", "email username")
       .sort({ createdAt: -1 });
 
     return res.json({ projects });
   } catch (err) {
-    console.error(err);
+    console.error("Fetch projects error:", err);
     return res.status(500).json("Failed to fetch projects");
   }
 };
